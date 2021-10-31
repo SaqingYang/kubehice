@@ -19,6 +19,8 @@ require (
 	github.com/Microsoft/go-winio v0.4.15
 	github.com/Microsoft/hcsshim v0.8.10-0.20200715222032-5eafd1556990
 	github.com/PuerkitoBio/purell v1.1.1
+	github.com/Shopify/sarama v1.30.0
+	github.com/Shopify/toxiproxy v2.1.4+incompatible // indirect
 	github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e
 	github.com/auth0/go-jwt-middleware v1.0.1 // indirect
 	github.com/aws/aws-sdk-go v1.38.49
@@ -41,13 +43,14 @@ require (
 	github.com/evanphx/json-patch v4.11.0+incompatible
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/go-ozzo/ozzo-validation v3.5.0+incompatible // indirect
+	github.com/go-redis/redis/v8 v8.11.4
 	github.com/godbus/dbus/v5 v5.0.4
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.5.2
 	github.com/google/cadvisor v0.39.2
-	github.com/google/go-cmp v0.5.5
+	github.com/google/go-cmp v0.5.6
 	github.com/google/gofuzz v1.1.0
 	github.com/google/uuid v1.1.2
 	github.com/googleapis/gnostic v0.5.5
@@ -63,8 +66,8 @@ require (
 	github.com/mrunalp/fileutils v0.5.0
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 	github.com/mvdan/xurls v1.1.0
-	github.com/onsi/ginkgo v1.14.0
-	github.com/onsi/gomega v1.10.1
+	github.com/onsi/ginkgo v1.16.4
+	github.com/onsi/gomega v1.16.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/runc v1.0.2
 	github.com/opencontainers/selinux v1.8.2
@@ -81,14 +84,16 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/vishvananda/netlink v1.1.0
 	github.com/vmware/govmomi v0.20.3
+	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c // indirect
+	github.com/xdg/stringprep v1.0.0 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.0
 	go.etcd.io/etcd/client/v3 v3.5.0
 	go.opentelemetry.io/otel/sdk v0.20.0
 	go.opentelemetry.io/otel/trace v0.20.0
 	go.opentelemetry.io/proto/otlp v0.7.0
-	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83
+	golang.org/x/crypto v0.0.0-20210920023735-84f357641f63
 	golang.org/x/exp v0.0.0-20210220032938-85be41e4509f // indirect
-	golang.org/x/net v0.0.0-20210520170846-37e1c6afe023
+	golang.org/x/net v0.0.0-20210917221730-978cfadd31cf
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22
@@ -103,6 +108,11 @@ require (
 	google.golang.org/grpc v1.38.0
 	google.golang.org/protobuf v1.26.0
 	gopkg.in/gcfg.v1 v1.2.0
+	gopkg.in/jcmturner/aescts.v1 v1.0.1 // indirect
+	gopkg.in/jcmturner/dnsutils.v1 v1.0.1 // indirect
+	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
+	gopkg.in/jcmturner/gokrb5.v7 v7.2.3 // indirect
+	gopkg.in/jcmturner/rpc.v1 v1.1.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.2.2
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.0.0

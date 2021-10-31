@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"go.etcd.io/etcd/client/pkg/v3/transport"
@@ -145,7 +146,11 @@ func (pl *Hice) Name() string {
 // PreFilter invoked at the prefilter extension point.
 func (pl *Hice) PreFilter(ctx context.Context, cycleState *framework.CycleState, pod *v1.Pod) *framework.Status {
 	// 先从etcd中读取多架构镜像信息
-	etcdCli, err := etcdClient("https://192.168.10.2:2379", "./peer.key", "./peer.crt", "./ca.crt")
+	etcdServer := os.Getenv("ETCD_SERVER")
+	etcdPeerKey := os.Getenv("PEER_KEY")
+	etcdPeerCrt := os.Getenv("PEER_CRT")
+	etcdCaCrt := os.Getenv("CA_CRT")
+	etcdCli, err := etcdClient(etcdServer, etcdPeerKey, etcdPeerCrt, etcdCaCrt)
 	if err != nil {
 		return nil
 	}

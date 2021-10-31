@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
 	"strconv"
 	"time"
 
@@ -179,9 +180,9 @@ func (pl *Hice) Filter(ctx context.Context, cycleState *framework.CycleState, po
 	}
 
 	s.MilliCPU = int64(float64(s.MilliCPU) * hiceKb / hiceKj)
-	if nodeInfo.Node().Name == "cloud-master" {
-		fmt.Println("node", nodeInfo.Node().Name, "kj", hiceKj, "req", s.MilliCPU)
-	}
+	// if nodeInfo.Node().Name == "cloud-worker2" {
+	// 	fmt.Println("node", nodeInfo.Node().Name, " pod: ", pod.Name, "kj", hiceKj, "req", s.MilliCPU, "node allocatable: ", nodeInfo.Allocatable.MilliCPU, nodeInfo.Requested.MilliCPU)
+	// }
 
 	insufficientResources := fitsRequest(&s, nodeInfo, pl.ignoredResources, pl.ignoredResourceGroups)
 
@@ -215,7 +216,11 @@ func (b Hice) Bind(ctx context.Context, state *framework.CycleState, p *v1.Pod, 
 	tempPod := p.DeepCopy()
 
 	// 替换镜像名为目标节点架构版本镜像
-	etcdCli, err := etcdClient("https://192.168.10.2:2379", "./peer.key", "./peer.crt", "./ca.crt")
+	etcdServer := os.Getenv("ETCD_SERVER")
+	etcdPeerKey := os.Getenv("PEER_KEY")
+	etcdPeerCrt := os.Getenv("PEER_CRT")
+	etcdCaCrt := os.Getenv("CA_CRT")
+	etcdCli, err := etcdClient(etcdServer, etcdPeerKey, etcdPeerCrt, etcdCaCrt)
 	if err != nil {
 		return framework.NewStatus(framework.Error, err.Error())
 	}
@@ -334,6 +339,10 @@ func changePodInEtcd(p *v1.Pod, cli *clientv3.Client) error {
 		Type:   v1.PodScheduled,
 		Status: v1.ConditionTrue,
 	})
+	if etcdPod.Annotations == nil {
+		etcdPod.Annotations = make(map[string]string)
+		etcdPod.Annotations["fromEtcd"] = "1"
+	}
 
 	// 序列化etcdPod对象
 	protoSerializer := protobuf.NewSerializer(etcdscheme.Scheme, etcdscheme.Scheme)

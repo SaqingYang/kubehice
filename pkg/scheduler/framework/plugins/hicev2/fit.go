@@ -147,11 +147,14 @@ func fitsRequest(podRequest *preFilterState, nodeInfo *framework.NodeInfo, ignor
 
 	// 计算节点已分配CPU资源，由于调度器缓存中的CPU资源数值并没有更新，必须根据kb和kj计算
 	// 同时当调度器从Api Server将Pod同步过来后，Pod中的资源数值为真实数值
-	// 从Api Server同步得到的已调度历史Pod的NodeName字段非空，从缓存中加入的NodeName字段为空
-	// 后面的代码并没有对函数中的Pod指针做任何更改
+	// v1.18: 从Api Server同步得到的已调度历史Pod的NodeName字段非空，从缓存中加入的NodeName字段为空
+	//        后面的代码并没有对函数中的Pod指针做任何更改
+	// v1.22: 缓存的pod也会更新NodeName字段，所以我们使用Pod注释区分是从API Server同步过来的对象还是从缓存中得到的对象
+	//        我们在Bind方法中添加了注释字段<fromEtcd, 1>，因此从API Server得到的Pod注释不为空，而从缓存中得到的Pod注释为空
 	for _, pod := range nodeInfo.Pods {
-		if pod.Pod.Spec.SchedulerName == "kubehice-scheduler" && pod.Pod.Spec.NodeName == "" {
+		if pod.Pod.Spec.SchedulerName == "kubehice-scheduler" && pod.Pod.Annotations == nil {
 
+			// fmt.Println("hice compute ----------------------------")
 			// 方法1： 下面的注释为通过Pod标签获得Pod的请求资源量，已弃用
 			// strPodMilliCPU, ok := pod.Pod.Labels["hice.cpu.req"]
 
