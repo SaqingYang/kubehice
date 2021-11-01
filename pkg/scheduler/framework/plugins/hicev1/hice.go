@@ -88,6 +88,10 @@ type ImagesList struct {
 	List []Images `json:"list,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=list"`
 }
 
+type UnAvailableImages struct {
+	Images []string `json:"images,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=images"`
+}
+
 // GetMultiArchImages 返回可用版本的多架构镜像名
 func GetMultiArchImages(imageName string, imagedata []byte) []ImageInf {
 
@@ -159,16 +163,79 @@ func (pl *Hice) PreFilter(ctx context.Context, cycleState *framework.CycleState,
 	resp, err := etcdCli.Get(context.Background(), key)
 	if err != nil {
 		fmt.Println("get resp error")
-		return nil
+		return framework.NewStatus(framework.Error, err.Error())
 	}
 
 	data := resp.Kvs[0].Value
+	unAvailableImages := GetUnAvailableImages(pod, data)
+	// 如果在Pod中包含未知的镜像名，则将其添加到Etcd的 “kubehice/unavailableimages” 中
+	if len(unAvailableImages.Images) != 0 {
+		resp, _ = etcdCli.Get(ctx, "kubehice/unavailableimages")
+		var oldEtcdData []byte
+		if len(resp.Kvs) != 0 {
+			oldEtcdData = resp.Kvs[0].Value
+		}
+		unAvailableImageData := UpdateUnAvailableImageData(oldEtcdData, unAvailableImages)
+		etcdCli.Put(ctx, "kubehice/unavailableimages", string(unAvailableImageData))
+		framework.NewStatus(framework.Error, "Can't find \""+unAvailableImages.Images[0]+"\" in etcd!")
+
+	}
 
 	s := PodAvailableArch(pod, data)
 	klog.V(3).Infof("Attempting to prefilte node by arches %v", s)
 	cycleState.Write(preFilterStateKey, preFilterState(s))
 	cycleState.Write(imageStateKey, ImageState(data))
 	return nil
+}
+
+// GetUnAvailableImages 计算pod中哪些容器的镜像名未包含在Etcd的MultArchImages中
+func GetUnAvailableImages(pod *v1.Pod, data []byte) UnAvailableImages {
+	unAvailableImages := UnAvailableImages{}
+	for _, c := range pod.Spec.Containers {
+		if len(GetMultiArchImages(c.Image, data)) == 0 {
+			unAvailableImages.Images = append(unAvailableImages.Images, c.Image)
+		}
+	}
+	return unAvailableImages
+}
+
+// 得到unavailable imaes在Etcd中新的数据对象，更新不可用镜像列表
+func UpdateUnAvailableImageData(old []byte, images UnAvailableImages) []byte {
+	var unAvailableImageData []byte
+	if len(images.Images) != 0 {
+		if len(old) == 0 {
+			unAvailableImageData, _ = json.Marshal(images)
+			return unAvailableImageData
+		} else {
+			existedUnAvailableImages := &UnAvailableImages{}
+			err := json.Unmarshal(old, existedUnAvailableImages)
+			if err != nil {
+				panic(err)
+			}
+			upgradeAble := false
+			for _, image := range images.Images {
+				isOld := false
+				for _, existedImage := range existedUnAvailableImages.Images {
+					if image == existedImage {
+						isOld = true
+						break
+					}
+				}
+				if !isOld {
+					upgradeAble = true
+					existedUnAvailableImages.Images = append(existedUnAvailableImages.Images, image)
+				}
+			}
+			if upgradeAble {
+				unAvailableImageData, _ = json.Marshal(existedUnAvailableImages)
+				return unAvailableImageData
+			} else {
+				return old
+			}
+
+		}
+	}
+	return old
 }
 
 // PreFilterExtensions do not exist for this plugin.

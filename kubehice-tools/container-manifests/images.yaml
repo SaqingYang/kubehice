@@ -1,0 +1,200 @@
+list:
+  - name: local-registry:5000/redis:latest
+    images:
+    - name: local-registry:5000/redis:latest
+      arch: amd64
+      os: linux
+    - name: local-registry:5000/redis:latest-arm64
+      arch: arm64
+      os: linux
+  - name: local-registry:5000/hice-client:latest
+    images:
+    - name: local-registry:5000/hice-client:latest
+      arch: amd64
+      os: linux
+    - name: local-registry:5000/hice-client:latest-arm64
+      arch: arm64
+      os: linux
+  - name: nginx:latest
+    images:
+    - name: local-registry:5000/nginx:latest-arm64
+      arch: arm64
+      os: linux
+    - name: local-registry:5000/nginx:latest-amd64
+      arch: amd64
+      os: linux
+  - name: ubuntu:16.04
+    images:
+    - name: ubuntu:16.04
+      os: linux
+      arch: arm64
+    - name: ubuntu:16.04
+      os: linux
+      arch: amd64
+  - name: quay.io/coreos/flannel:v0.12.0
+    images:
+    - name: quay.io/coreos/flannel:v0.12.0-amd64
+      arch: amd64
+      os: linux
+    - name: quay.io/coreos/flannel:v0.12.0-arm64
+      arch: arm64
+      os: linux
+    - name: quay.io/coreos/flannel:v0.12.0-arm
+      arch: arm
+      os: linux
+    - name: quay.io/coreos/flannel:v0.12.0-ppc64le
+      arch: ppc64le
+      os: linux
+    - name: quay.io/coreos/flannel:v0.12.0-s390x
+      arch: s390x
+      os: linux
+  - name: gogs/gogs:latest
+    images:
+    - name: gogs/gogs:latest
+      arch: amd64
+      os: linux
+    - name: gogs/gogs-rpi:latest
+      arch: arm64
+      os: linux
+    - name: gogs/gogs-rpi:latest
+      arch: arm
+      os: linux
+  - name: local-registry:5000/mongo:latest
+    images:
+    - name: local-registry:5000/mongo:latest
+      arch: amd64
+      os: linux
+    # - name: local-registry:5000/mongo:latest-arm64
+    #   arch: arm64
+    #   os: linux
+  - name: local-registry:5000/redis:alpine
+    images:
+    - name: local-registry:5000/redis:alpine
+      arch: amd64
+      os: linux
+    - name: local-registry:5000/redis:alpine-arm64
+      arch: arm64
+      os: linux
+  - name: local-registry:5000/weaveworksdemos/user:0.4.7
+    images:
+    - name: local-registry:5000/weaveworksdemos/user:0.4.7
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/weaveworksdemos/catalogue:0.3.5
+    images: 
+    - name: local-registry:5000/weaveworksdemos/catalogue:0.3.5
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/weaveworksdemos/carts:0.4.8
+    images:
+    - name: local-registry:5000/weaveworksdemos/carts:0.4.8
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/weaveworksdemos/catalogue-db:0.3.0
+    images:
+    - name: local-registry:5000/weaveworksdemos/catalogue-db:0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/weaveworksdemos/front-end:0.3.12
+    images:
+    - name: local-registry:5000/weaveworksdemos/front-end:0.3.12
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/weaveworksdemos/orders:0.4.7
+    images:
+    - name: local-registry:5000/weaveworksdemos/orders:0.4.7
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/weaveworksdemos/payment:0.4.3
+    images:
+    - name: local-registry:5000/weaveworksdemos/payment:0.4.3
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/weaveworksdemos/queue-master:0.3.1
+    images:
+    - name: local-registry:5000/weaveworksdemos/queue-master:0.3.1
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/rabbitmq:3.6.8-management
+    images:
+    - name: local-registry:5000/rabbitmq:3.6.8-management
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/kbudde/rabbitmq-exporter:latest
+    images:
+    - name: local-registry:5000/kbudde/rabbitmq-exporter:latest
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/weaveworksdemos/shipping:0.4.8
+    images:
+    - name: local-registry:5000/weaveworksdemos/shipping:0.4.8
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/weaveworksdemos/user-db:0.3.0
+    images:
+    - name: local-registry:5000/weaveworksdemos/user-db:0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/emailservice:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/emailservice:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/checkoutservice:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/checkoutservice:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/recommendationservice:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/recommendationservice:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/frontend:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/frontend:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/paymentservice:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/paymentservice:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/productcatalogservice:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/productcatalogservice:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/cartservice:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/cartservice:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/loadgenerator:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/loadgenerator:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/currencyservice:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/currencyservice:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/shippingservice:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/shippingservice:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/google-samples/microservices-demo/adservice:v0.3.0
+    images:
+    - name: local-registry:5000/google-samples/microservices-demo/adservice:v0.3.0
+      arch: amd64
+      os: linux
+  - name: local-registry:5000/busybox:latest
+    images:
+    - name: local-registry:5000/busybox:latest
+      arch: amd64
+      os: linux
+    - name: local-registry:5000/busybox:latest-arm64
+      arch: arm64
+      os: linux
