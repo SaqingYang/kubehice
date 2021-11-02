@@ -55,6 +55,7 @@ func main() {
 		}
 
 		if len(resp.Kvs) == 0 {
+			log.Println("No unavailable images!")
 			time.Sleep(time.Minute * 10)
 			continue
 		}
@@ -72,9 +73,13 @@ func main() {
 		stillUnAvailableImages := &UnAvailableImages{}
 		availableImageList := &ImagesList{}
 		for _, image := range images.Images {
+			if image == "" {
+				continue
+			}
 			multi_archImages, err := Inspect(image, "local-registry")
 			if err != nil {
 				stillUnAvailableImages.Images = append(stillUnAvailableImages.Images, image)
+				log.Println(err)
 				continue
 			}
 			if len(multi_archImages.ImageInfs) == 0 {
@@ -98,22 +103,22 @@ func main() {
 			if err != nil {
 				log.Print(err)
 			}
-			UpdateUnavailableImagesInEtcd(etcdCli, *stillUnAvailableImages)
+			UpdateUnAvailableImagesDataInEtcd(etcdCli, *stillUnAvailableImages)
 		}
 
 	}
 }
 
 // UpdateUnavailableImagesInEtcd 更新Etcd中的"kubehice/unavailableimages"缓存
-func UpdateUnavailableImagesInEtcd(cli *clientv3.Client, images UnAvailableImages) error {
-	old, _ := cli.Get(context.Background(), "kubehice/unavailableimages")
-	newData := UpdateUnAvailableImageData(old.Kvs[0].Value, images)
+func UpdateUnAvailableImagesDataInEtcd(cli *clientv3.Client, images UnAvailableImages) error {
+	// old, _ := cli.Get(context.Background(), "kubehice/unavailableimages")
+	newData, _ := json.Marshal(images)
 	_, err := cli.Put(context.Background(), "kubehice/unavailableimages", string(newData))
 	return err
 }
 
 // 得到unavailable imaes在Etcd中新的数据对象，更新不可用镜像列表
-func UpdateUnAvailableImageData(old []byte, images UnAvailableImages) []byte {
+func UpdateUnAvailableImagesData(old []byte, images UnAvailableImages) []byte {
 	var unAvailableImageData []byte
 	if len(images.Images) != 0 {
 		if len(old) == 0 {
@@ -128,6 +133,9 @@ func UpdateUnAvailableImageData(old []byte, images UnAvailableImages) []byte {
 			upgradeAble := false
 			for _, image := range images.Images {
 				isOld := false
+				if image == "" {
+					continue
+				}
 				for _, existedImage := range existedUnAvailableImages.Images {
 					if image == existedImage {
 						isOld = true
@@ -189,8 +197,11 @@ func CheckKeywords(image string) string {
 
 // Inspect 查询单个image的镜像索引，获得支持的架构，暂不考虑Windows的镜像
 func Inspect(image string, insecureRegistrys string) (*Images, error) {
+	if image == "" {
+		return nil, nil
+	}
 	cmd := "docker manifest inspect " + image
-	if strings.Contains(image, insecureRegistrys) {
+	if insecureRegistrys != "" && strings.Contains(image, insecureRegistrys) {
 		cmd = cmd + " --insecure"
 	}
 	c := exec.Command("bash", "-c", cmd)
@@ -204,9 +215,15 @@ func Inspect(image string, insecureRegistrys string) (*Images, error) {
 		reg1 := regexp.MustCompile(`"architecture": ".*"`)
 
 		results := reg1.FindAllStringSubmatch(string(output), -1)
-
+		existed := make(map[string]string)
 		for _, result := range results {
 			arch := strings.Split(strings.Split(result[0], " ")[1], `"`)[1]
+			_, ok := existed[arch]
+			if ok {
+				continue
+			} else {
+				existed[arch] = "arch"
+			}
 			images.Name = image
 			images.ImageInfs = append(images.ImageInfs, ImageInf{Name: image,
 				Os:   "linux", // 只考虑Linux操作系统
