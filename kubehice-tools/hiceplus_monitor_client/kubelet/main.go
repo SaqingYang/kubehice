@@ -54,6 +54,11 @@ type ContainerCpuStat struct {
 	Id    string
 	Usage int
 }
+type NodeStat struct {
+	NodeName string
+	Stats    []ContainerCpuStat
+}
+
 type ContainerInf struct {
 	Time      int64
 	Container string
@@ -76,6 +81,7 @@ var (
 	cert   = ""
 	key    = ""
 	server = ""
+	node   = ""
 )
 
 func init() {
@@ -84,6 +90,7 @@ func init() {
 	flag.StringVar(&cert, "cert", "apiserver-kubelet-client.crt", "https crt")
 	flag.StringVar(&key, "key", "apiserver-kubelet-client.key", "https key")
 	flag.StringVar(&server, "server", "localhost:12345", "server ip:port")
+	flag.StringVar(&node, "node", "cloud-worker1", "nodename in kubernetes cluster")
 	flag.Parse()
 	if cloud && url == "" {
 		url = "https://localhost:10250/metrics/cadvisor"
@@ -149,7 +156,8 @@ func main() {
 		} else {
 			// deltaTime := currentTime - lastTime
 			lastTime = currentTime
-			var containerCpuStat []ContainerCpuStat
+			var containerCpuStats NodeStat
+			containerCpuStats.NodeName = node
 			for id, item := range ccustMap {
 				if item.total-lastCcustMap[id].total == 0 {
 					continue
@@ -161,13 +169,13 @@ func main() {
 					realId := ids[len(ids)-1]
 					cstat := ContainerCpuStat{Id: realId,
 						Usage: int(usage)}
-					containerCpuStat = append(containerCpuStat, cstat)
+					containerCpuStats.Stats = append(containerCpuStats.Stats, cstat)
 				}
 
 			}
 			// fmt.Println(containerCpuStat)
-			if len(containerCpuStat) != 0 {
-				jsonStats, err := json.Marshal(containerCpuStat)
+			if len(containerCpuStats.Stats) != 0 {
+				jsonStats, err := json.Marshal(containerCpuStats)
 				if err != nil {
 					panic(err)
 				}
@@ -227,7 +235,7 @@ func AllContainersCpuStats(cli *client.Client, ctx context.Context) ([]Container
 	}
 	var containersCpuStat []ContainerCpuStat
 	for _, container := range containers {
-		usage, err := ContainerCpuStats(cli, ctx, container.ID)
+		usage, err := GetContainerCpuStats(cli, ctx, container.ID)
 		if err != nil {
 			return containersCpuStat, err
 		}
@@ -235,7 +243,7 @@ func AllContainersCpuStats(cli *client.Client, ctx context.Context) ([]Container
 	}
 	return containersCpuStat, nil
 }
-func ContainerCpuStats(cli *client.Client, ctx context.Context, id string) (int, error) {
+func GetContainerCpuStats(cli *client.Client, ctx context.Context, id string) (int, error) {
 	stat, err := cli.ContainerStats(ctx, id, false)
 	if err != nil {
 		panic(err)
