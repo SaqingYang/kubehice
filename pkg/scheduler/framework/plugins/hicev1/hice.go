@@ -19,7 +19,6 @@ import (
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer/protobuf"
 	"k8s.io/klog/v2"
@@ -309,10 +308,12 @@ func (b Hice) Bind(ctx context.Context, state *framework.CycleState, p *v1.Pod, 
 	// 	Target:     v1.ObjectReference{Kind: "Node", Name: nodeName},
 	// }
 
-	node, err := b.handle.ClientSet().CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	nodeInfo, err := b.handle.SnapshotSharedLister().NodeInfos().Get(nodeName)
+
 	if err != nil {
 		return framework.NewStatus(framework.Error, err.Error())
 	}
+	node := nodeInfo.Node()
 	tempPod := p.DeepCopy()
 
 	// 替换镜像名为目标节点架构版本镜像
@@ -320,7 +321,11 @@ func (b Hice) Bind(ctx context.Context, state *framework.CycleState, p *v1.Pod, 
 	ConvertPodImages(tempPod, node.Labels["kubernetes.io/arch"], imageData)
 
 	// AddHiceSchedulerFlag(&tempPod)
-	etcdCli, err := etcdClient("https://192.168.10.2:2379", "./peer.key", "./peer.crt", "./ca.crt")
+	etcdServer := os.Getenv("ETCD_SERVER")
+	etcdPeerKey := os.Getenv("PEER_KEY")
+	etcdPeerCrt := os.Getenv("PEER_CRT")
+	etcdCaCrt := os.Getenv("CA_CRT")
+	etcdCli, err := etcdClient(etcdServer, etcdPeerKey, etcdPeerCrt, etcdCaCrt)
 
 	if err != nil {
 		return framework.NewStatus(framework.Error, err.Error())

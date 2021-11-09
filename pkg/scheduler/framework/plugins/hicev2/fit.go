@@ -75,26 +75,6 @@ func computePodResourceRequest(pod *v1.Pod) preFilterState {
 	return result
 }
 
-// PreFilter invoked at the prefilter extension point.
-// func (f *Hice) PreFilter(ctx context.Context, cycleState *framework.CycleState, pod *v1.Pod) *framework.Status {
-// cycleState.Write(preFilterStateKey, computePodResourceRequest(pod))
-// 	return nil
-// }
-
-// func getPreFilterState(cycleState *framework.CycleState) (*preFilterState, error) {
-// 	c, err := cycleState.Read(preFilterStateKey)
-// 	if err != nil {
-// preFilterState doesn't exist, likely PreFilter wasn't invoked.
-// 		return nil, fmt.Errorf("error reading %q from cycleState: %v", preFilterStateKey, err)
-// 	}
-
-// 	s, ok := c.(*preFilterState)
-// 	if !ok {
-// 		return nil, fmt.Errorf("%+v  convert to NodeResourcesFit.preFilterState error", c)
-// 	}
-// 	return s, nil
-// }
-
 // InsufficientResource describes what kind of resource limit is hit and caused the pod to not fit the node.
 type InsufficientResource struct {
 	ResourceName v1.ResourceName
@@ -153,21 +133,6 @@ func fitsRequest(podRequest *preFilterState, nodeInfo *framework.NodeInfo, ignor
 	//        我们在Bind方法中添加了注释字段<fromEtcd, 1>，因此从API Server得到的Pod注释不为空，而从缓存中得到的Pod注释为空
 	for _, pod := range nodeInfo.Pods {
 		if pod.Pod.Spec.SchedulerName == "kubehice-scheduler" && pod.Pod.Annotations == nil {
-
-			// fmt.Println("hice compute ----------------------------")
-			// 方法1： 下面的注释为通过Pod标签获得Pod的请求资源量，已弃用
-			// strPodMilliCPU, ok := pod.Pod.Labels["hice.cpu.req"]
-
-			// if !ok {
-			// 	strPodMilliCPU = "0m"
-			// }
-			// strPodMilliCPU = strings.Split(strPodMilliCPU, "m")[0]
-			// hicePodRequestedMilliCPU, err := strconv.ParseInt(strPodMilliCPU, 10, 64)
-			// if err != nil {
-			// 	hicePodRequestedMilliCPU = 0
-			// }
-
-			// 方法2： 下面代码假设没有nodeName字段的Pod也没有更新资源配置数值
 			hicePodRequestedMilliCPU := computePodResourceRequest(pod.Pod).MilliCPU
 
 			strHiceKb, ok := pod.Pod.Labels["hice.kb"]

@@ -17,5 +17,5 @@ func GenerateServiceGraph() *MicroServiceGraph {
 	return graph
 }
 func TestGetExistedNeighborEdge(t *testing.T) {
-	t.Log(GenerateServiceGraph())
+	// 使用Label指明Service对应的Pod，此Label在Pod中存在
 }

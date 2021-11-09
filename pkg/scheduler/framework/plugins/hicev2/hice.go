@@ -21,7 +21,6 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer/protobuf"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -206,13 +205,14 @@ func New(plArgs runtime.Object, h framework.Handle) (framework.Plugin, error) {
 // 其中一个返回了nil，将不再执行其它插件的bind函数
 func (b Hice) Bind(ctx context.Context, state *framework.CycleState, p *v1.Pod, nodeName string) *framework.Status {
 	klog.V(3).Infof("Attempting to bind %v/%v to %v", p.Namespace, p.Name, nodeName)
-
 	c, _ := state.Read("images")
 	images, _ := c.(hicev1.ImageState)
-	node, err := b.handle.ClientSet().CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	nodeInfo, err := b.handle.SnapshotSharedLister().NodeInfos().Get(nodeName)
+
 	if err != nil {
 		return framework.NewStatus(framework.Error, err.Error())
 	}
+	node := nodeInfo.Node()
 	tempPod := p.DeepCopy()
 
 	// 替换镜像名为目标节点架构版本镜像
