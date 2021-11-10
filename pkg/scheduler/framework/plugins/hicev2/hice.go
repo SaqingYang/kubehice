@@ -225,7 +225,6 @@ func (b Hice) Bind(ctx context.Context, state *framework.CycleState, p *v1.Pod, 
 		return framework.NewStatus(framework.Error, err.Error())
 	}
 	defer etcdCli.Close()
-
 	ConvertPodImages(tempPod, node.Labels["kubernetes.io/arch"], images)
 
 	// 获取节点单线程能力
@@ -248,7 +247,6 @@ func (b Hice) Bind(ctx context.Context, state *framework.CycleState, p *v1.Pod, 
 	}
 	ConvertPodCpu(tempPod, hiceKb, hiceKj)
 
-	defer etcdCli.Close()
 	tempPod.Spec.NodeName = nodeName
 
 	err = changePodInEtcd(tempPod, etcdCli)
