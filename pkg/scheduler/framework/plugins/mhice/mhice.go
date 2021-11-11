@@ -99,12 +99,63 @@ func New(_ runtime.Object, h framework.Handle) (framework.Plugin, error) {
 	return &MHice{ServiceGraph: MicroServiceGraph{}, handle: h}, nil
 }
 
+// neighborEdgeWeight 根据微服务交互图得到与此Pod相连的所有的微服务调用边
 func (pl *MHice) neighborEdgeWeight(p *framework.QueuedPodInfo, graph *MicroServiceGraph) []int64 {
 
-	return nil
+	var edges []int64
+	pSvc, ok := p.Pod.Labels["svc"]
+	if !ok {
+		return nil
+	}
+	pIndex, ok := graph.Vertex[pSvc]
+	if !ok {
+		return nil
+	}
+
+	for _, v := range graph.Vertex {
+		if graph.Edge[v][pIndex] >= 0 {
+			edges = append(edges, graph.Edge[v][pIndex])
+			continue
+		}
+		if graph.Edge[pIndex][v] >= 0 {
+			edges = append(edges, graph.Edge[v][pIndex])
+		}
+
+	}
+	return edges
 }
 
+// neighborExistedServiceEdgeWeight根据集群已有状态和微服务交互图提取与已有
+// 微服务实例交互的微服务边
 func (pl *MHice) neighborExistedServiceEdgeWeight(p *framework.QueuedPodInfo, graph *MicroServiceGraph) []int64 {
-
-	return nil
+	nodes, err := pl.handle.SnapshotSharedLister().NodeInfos().List()
+	if err != nil {
+		return nil
+	}
+	var edges []int64
+	pSvc, ok := p.Pod.Labels["svc"]
+	if !ok {
+		return nil
+	}
+	pIndex, ok := graph.Vertex[pSvc]
+	if !ok {
+		return nil
+	}
+	for _, node := range nodes {
+		for _, ep := range node.Pods {
+			svc, ok := ep.Pod.Labels["svc"]
+			if !ok {
+				continue
+			}
+			out := graph.Edge[pIndex][graph.Vertex[svc]]
+			in := graph.Edge[graph.Vertex[svc]][pIndex]
+			if in >= 0 {
+				edges = append(edges, in)
+			}
+			if out >= 0 {
+				edges = append(edges, out)
+			}
+		}
+	}
+	return edges
 }
