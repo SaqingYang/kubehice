@@ -8,54 +8,6 @@ import (
 	k8sYaml "k8s.io/apimachinery/pkg/util/yaml"
 )
 
-func SetAPICall(src, dst string, value int, g *MicroServiceGraph) {
-	srcIndex := g.Vertex[src]
-	dstIndex := g.Vertex[dst]
-	g.Edge[srcIndex][dstIndex] = int64(value)
-}
-
-func GenerateServiceGraph() *MicroServiceGraph {
-	graph := &MicroServiceGraph{Num: 11}
-
-	graph.Vertex = make(map[string]int)
-	graph.Vertex["ad"] = 0 //无
-	graph.Vertex["cart"] = 1
-	graph.Vertex["checkout"] = 2
-	graph.Vertex["currency"] = 3 //无
-	graph.Vertex["email"] = 4    //无
-	graph.Vertex["frontend"] = 5
-	graph.Vertex["payment"] = 6        //无
-	graph.Vertex["productcatalog"] = 7 //无
-	graph.Vertex["recommendation"] = 8
-	graph.Vertex["redis-cart"] = 9 //无
-	graph.Vertex["shipping"] = 10  //无
-	for i := 0; i < graph.Num; i++ {
-		for j := 0; j < graph.Num; j++ {
-			graph.Edge[i][j] = -1
-		}
-	}
-
-	SetAPICall("frontend", "cart", 1, graph)
-	SetAPICall("frontend", "recommendation", 1, graph)
-	SetAPICall("frontend", "productcatalog", 100, graph)
-	SetAPICall("frontend", "shipping", 1, graph)
-	SetAPICall("frontend", "checkout", 1, graph)
-	SetAPICall("frontend", "ad", 1, graph)
-
-	SetAPICall("cart", "redis-cart", 1, graph)
-
-	SetAPICall("recommendation", "productcatalog", 10, graph)
-
-	SetAPICall("checkout", "productcatalog", 10, graph)
-	SetAPICall("checkout", "currency", 1, graph)
-	SetAPICall("checkout", "shipping", 1, graph)
-	SetAPICall("checkout", "payment", 1, graph)
-	SetAPICall("checkout", "email", 1, graph)
-	SetAPICall("checkout", "cart", 1, graph)
-
-	SetAPICall("checkout", "cart", 1, graph)
-	return graph
-}
 func TestGetExistedNeighborEdge(t *testing.T) {
 	// 使用Label指明Service对应的Pod，此Label在Pod中存在
 	existedPods := &v1.PodList{}
