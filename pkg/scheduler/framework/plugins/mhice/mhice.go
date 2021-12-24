@@ -103,7 +103,8 @@ func (pl *MHice) PreFilter(ctx context.Context, cycleState *framework.CycleState
 	// 如果与已部署微服务存在交互，满足部署条件
 	callExistedSvc := pl.neighborEdgeWeight(pod, &pl.ServiceGraph)
 	if len(callExistedSvc) != 0 {
-		return nil
+		// return nil
+		return framework.NewStatus(framework.Error, "pod"+pod.Name+" svc:"+pod.Labels["svc"]+" can be scheduled!")
 	}
 
 	// 如果与已部署微服务不存在交互，
@@ -114,7 +115,7 @@ func (pl *MHice) PreFilter(ctx context.Context, cycleState *framework.CycleState
 			_, ok := pl.ServiceGraph.Vertex[np.Pod.Labels["svc"]]
 			if ok {
 				// 当graph为连通图，则认为不满足部署条件，等待
-				return framework.NewStatus(framework.Wait, "pod"+pod.Name+" svc:"+pod.Labels["svc"]+" should not schedule until other more import svc deployed!")
+				return framework.NewStatus(framework.Error, "pod"+pod.Name+" svc:"+pod.Labels["svc"]+" should not schedule until other more import svc deployed!")
 				// 此此pod属于另一个子图，此子图与集群已有微服务无交互，待优化
 			}
 		}

@@ -49,25 +49,25 @@ func main() {
 	for {
 		resp, err := etcdCli.Get(context.Background(), "kubehice/unavailableimages")
 		if err != nil {
-			time.Sleep(time.Minute * 10)
+			time.Sleep(time.Minute * 1)
 			log.Println(err)
 			continue
 		}
 
 		if len(resp.Kvs) == 0 {
 			log.Println("No unavailable images!")
-			time.Sleep(time.Minute * 10)
+			time.Sleep(time.Minute * 1)
 			continue
 		}
 		images := &UnAvailableImages{}
 		err = json.Unmarshal(resp.Kvs[0].Value, images)
 		if err != nil {
 			log.Println(err)
-			time.Sleep(time.Minute * 10)
+			time.Sleep(time.Minute * 1)
 			continue
 		}
 		if len(images.Images) == 0 {
-			time.Sleep(time.Minute * 10)
+			time.Sleep(time.Minute * 1)
 			continue
 		}
 		stillUnAvailableImages := &UnAvailableImages{}
