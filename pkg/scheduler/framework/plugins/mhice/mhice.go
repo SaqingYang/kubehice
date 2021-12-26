@@ -8,6 +8,7 @@ package mhice
 
 import (
 	"context"
+	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,9 +41,11 @@ func (pl *MHice) Name() string {
 	return Name
 }
 
-// Less is the function used by the activeQ heap algorithm to sort pods.
-// It sorts pods based on their priority. When priorities are equal, it uses
-// PodQueueInfo.timestamp.
+// Less 根据微服务交互图和网络拓扑结构来选择Pod优先级，
+// example: p1， p2， p4, 已部署微服务p0,p3
+// if p1--<1>-->p0, p1--<-1>--p3, p2--<-1>--p0, p2--<0.5>--p3， then p2<p1
+// if p1--<-1>-->p0, p2--<-1>-->p3, p1--<4>-->p4, p2--<3>-->p4, then p2<p1
+
 func (pl *MHice) Less(pInfo1, pInfo2 *framework.QueuedPodInfo) bool {
 
 	// 获取p1和p2与集群已有负载的交互关系
@@ -52,9 +55,11 @@ func (pl *MHice) Less(pInfo1, pInfo2 *framework.QueuedPodInfo) bool {
 	// 与集群已有负载有交互关系的优先级更高
 	if p1ExistedServiceNeighborEdgeWeight == nil {
 		if p2ExistedServiceNeighborEdgeWeight != nil {
+			fmt.Println(pInfo1.Pod.Name, "与已有负载有交互 ", pInfo2.Pod.Name, "与已有负载没有交互")
 			return true
 		}
 	} else if p2ExistedServiceNeighborEdgeWeight == nil {
+		fmt.Println(pInfo1.Pod.Name, "与已有负载没有交互 ", pInfo2.Pod.Name, "与已有负载有交互")
 		return false
 	}
 
@@ -74,6 +79,7 @@ func (pl *MHice) Less(pInfo1, pInfo2 *framework.QueuedPodInfo) bool {
 			}
 		}
 
+		fmt.Println("都与集群已有负载有交互! ", pInfo1.Pod.Name, "max Edge=", p1Max, " ", pInfo2.Pod.Name, " max Edge=", p2Max)
 		if p1Max > p2Max {
 			return false
 		} else {
@@ -92,7 +98,7 @@ func (pl *MHice) Less(pInfo1, pInfo2 *framework.QueuedPodInfo) bool {
 		for _, e := range p2Neighbor {
 			p2Sum = p2Sum + e
 		}
-
+		fmt.Println("都与集群已有负载没有交互！ ", pInfo1.Pod.Name, "sum Edge=", p1Sum, " ", pInfo2.Pod.Name, " sum Edge=", p2Sum)
 		return p1Sum < p2Sum
 	}
 }
