@@ -9,6 +9,8 @@ package mhice
 import (
 	"context"
 	"fmt"
+	"math"
+	"strconv"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,6 +23,7 @@ const Name = "MHice"
 // MHice is a plugin that implements Priority based sorting.
 type MHice struct {
 	ServiceGraph MicroServiceGraph
+	Toplogy      NetworkToplogy
 	handle       framework.Handle
 }
 
@@ -34,7 +37,29 @@ type MicroServiceGraph struct {
 	Num    int
 }
 
+type NetworkToplogy struct {
+	Node    map[string]int
+	Devices Tree
+}
+
+type Tree struct {
+	Device    string // root表示根
+	Bandwidth int64  // Mbps, 到上一级的带宽
+	Latency   int64  // us， 到上一级节点的延迟
+	Children  []*Tree
+}
+
 var _ framework.QueueSortPlugin = &MHice{}
+var _ framework.PreFilterPlugin = &MHice{}
+var _ framework.ScorePlugin = &MHice{}
+
+func (hice *MHice) ScoreExtensions() framework.ScoreExtensions {
+	return nil
+}
+
+func (hice *MHice) PreFilterExtensions() framework.PreFilterExtensions {
+	return nil
+}
 
 // Name returns name of the plugin.
 func (pl *MHice) Name() string {
@@ -64,7 +89,7 @@ func (pl *MHice) Less(pInfo1, pInfo2 *framework.QueuedPodInfo) bool {
 	}
 
 	// 如果都与集群已有负载有交互关系，取与集群已有负载的邻边最大者为高优先pod
-	if p1ExistedServiceNeighborEdgeWeight == nil && p2ExistedServiceNeighborEdgeWeight == nil {
+	if p1ExistedServiceNeighborEdgeWeight != nil && p2ExistedServiceNeighborEdgeWeight != nil {
 		p1Max := int64(0)
 		p2Max := int64(0)
 		for _, e := range p1ExistedServiceNeighborEdgeWeight {
@@ -79,7 +104,7 @@ func (pl *MHice) Less(pInfo1, pInfo2 *framework.QueuedPodInfo) bool {
 			}
 		}
 
-		fmt.Println("都与集群已有负载有交互! ", pInfo1.Pod.Name, "max Edge=", p1Max, " ", pInfo2.Pod.Name, " max Edge=", p2Max)
+		fmt.Println("都与集群已有负载没有交互! ", pInfo1.Pod.Name, "max Edge=", p1Max, " ", pInfo2.Pod.Name, " max Edge=", p2Max)
 		if p1Max > p2Max {
 			return false
 		} else {
@@ -107,23 +132,100 @@ func (pl *MHice) Less(pInfo1, pInfo2 *framework.QueuedPodInfo) bool {
 // 若微服务交互图包含多个独立的子图，另行考虑
 func (pl *MHice) PreFilter(ctx context.Context, cycleState *framework.CycleState, pod *v1.Pod) *framework.Status {
 	// 如果与已部署微服务存在交互，满足部署条件
-	callExistedSvc := pl.neighborEdgeWeight(pod, &pl.ServiceGraph)
-	if len(callExistedSvc) != 0 {
-		// return nil
-		return framework.NewStatus(framework.Error, "pod"+pod.Name+" svc:"+pod.Labels["svc"]+" can be scheduled!")
+	callSvc := pl.neighborEdgeWeight(pod, &pl.ServiceGraph)
+	fmt.Println(pod.Name, " callSvc", callSvc)
+	podIndex, ok := pl.ServiceGraph.Vertex[pod.Labels["app"]]
+	if !ok {
+		// 没有查到app属于微服务交互图中哪一个Service，无法识别它属于哪一个Service
+		return nil
 	}
 
 	// 如果与已部署微服务不存在交互，
 	// 存在已部署微服务属于微服务交互图，当graph为连通图，则认为不满足部署条件，等待
+	maxEdge := int64(-1)
 	nodes, _ := pl.handle.SnapshotSharedLister().NodeInfos().List()
+	deployedSvc := make(map[int]int)
 	for _, node := range nodes {
 		for _, np := range node.Pods {
-			_, ok := pl.ServiceGraph.Vertex[np.Pod.Labels["svc"]]
+			vb, ok := pl.ServiceGraph.Vertex[np.Pod.Labels["app"]]
 			if ok {
-				// 当graph为连通图，则认为不满足部署条件，等待
-				return framework.NewStatus(framework.Error, "pod"+pod.Name+" svc:"+pod.Labels["svc"]+" should not schedule until other more import svc deployed!")
-				// 此此pod属于另一个子图，此子图与集群已有微服务无交互，待优化
+				// 此pod在微服务图中
+				edgeva2vb := pl.ServiceGraph.Edge[podIndex][vb]
+				edgevb2va := pl.ServiceGraph.Edge[vb][podIndex]
+				if maxEdge < edgeva2vb {
+					maxEdge = edgeva2vb
+				}
+				if maxEdge < edgevb2va {
+					maxEdge = edgevb2va
+				}
+
+				deployedSvc[vb] = vb
+
 			}
+		}
+	}
+
+	// 暂时只考虑单副本
+	deployedSvcMaxNeighborEdge := int64(-1)
+
+	for k := range deployedSvc {
+		for i := 0; i < pl.ServiceGraph.Num; i++ {
+			_, ok := deployedSvc[i]
+			if !ok {
+				edge := pl.ServiceGraph.Edge[k][i]
+				if edge > deployedSvcMaxNeighborEdge {
+					fmt.Println("k ", k, "i ", i, "edge ", edge)
+					deployedSvcMaxNeighborEdge = edge
+				} else {
+					edge = pl.ServiceGraph.Edge[i][k]
+					if edge > deployedSvcMaxNeighborEdge {
+						fmt.Println("k ", k, "i ", i, "edge ", edge)
+						deployedSvcMaxNeighborEdge = edge
+					}
+				}
+			}
+		}
+	}
+	fmt.Println("已部署微服务与未部署微服务API调用的最大边=", deployedSvcMaxNeighborEdge)
+
+	// 如果pod与已部署微服务没有API调用关系“-1”
+	if maxEdge == -1 {
+		fmt.Println("pod与已部署微服务没有API调用关系“-1”")
+		maxNeighborSum := int64(-1)
+		for i := 0; i < pl.ServiceGraph.Num; i++ {
+			neighborSum := int64(0)
+
+			for iCall := 0; iCall < pl.ServiceGraph.Num; iCall++ {
+				iCallSum := int64(0)
+				callISum := int64(0)
+				for j := 0; j < pl.ServiceGraph.Num; j++ {
+					if pl.ServiceGraph.Edge[iCall][j] != -1 {
+						iCallSum += pl.ServiceGraph.Edge[iCall][j]
+					}
+					if pl.ServiceGraph.Edge[j][iCall] != -1 {
+						callISum += pl.ServiceGraph.Edge[j][iCall]
+					}
+				}
+				neighborSum = iCallSum + callISum
+				if neighborSum > maxNeighborSum {
+					maxNeighborSum = neighborSum
+				}
+			}
+
+		}
+
+		neighborEdgeSum := int64(0)
+		for _, i := range callSvc {
+			neighborEdgeSum += i
+		}
+		if neighborEdgeSum != maxNeighborSum {
+			fmt.Println("neighborEdgeSum ", neighborEdgeSum, "maxNeighborSum ", maxNeighborSum)
+			return framework.NewStatus(framework.Error, "pod"+pod.Name+" svc:"+pod.Labels["app"]+" should not schedule until other svc created! ")
+		}
+	} else {
+		fmt.Println("pod与已部署微服务有API调用关系“-1”")
+		if maxEdge != deployedSvcMaxNeighborEdge {
+			return framework.NewStatus(framework.Error, "pod"+pod.Name+" svc:"+pod.Labels["app"]+" should not schedule until other svc created!")
 		}
 	}
 	return nil
@@ -131,12 +233,126 @@ func (pl *MHice) PreFilter(ctx context.Context, cycleState *framework.CycleState
 
 // Score 对所有符合部署要求的节点进行排序，原则是预期延迟最低优先，若无法计算，即首次部署微服务，交互需求最多者优先
 func (pl *MHice) Score(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodeName string) (int64, *framework.Status) {
+	podIndex, ok := pl.ServiceGraph.Vertex[pod.Labels["app"]]
+	if !ok {
+		// 没有查到app属于微服务交互图中哪一个Service，无法识别它属于哪一个Service
+		return 100, nil
+	}
+	maxEdge := int64(-1)
+	nodes, _ := pl.handle.SnapshotSharedLister().NodeInfos().List()
+	deployedSvc := make(map[int]int)
+	for _, node := range nodes {
+		for _, np := range node.Pods {
+			vb, ok := pl.ServiceGraph.Vertex[np.Pod.Labels["app"]]
+			if ok {
+				// 此pod在微服务图中
+				edgeva2vb := pl.ServiceGraph.Edge[podIndex][vb]
+				edgevb2va := pl.ServiceGraph.Edge[vb][podIndex]
+				if maxEdge < edgeva2vb {
+					maxEdge = edgeva2vb
+				}
+				if maxEdge < edgevb2va {
+					maxEdge = edgevb2va
+				}
+
+				deployedSvc[vb] = vb
+
+			}
+		}
+	}
+
+	nodeInfo, err := pl.handle.SnapshotSharedLister().NodeInfos().Get(nodeName)
+	if err != nil {
+		return 0, framework.NewStatus(framework.Error, fmt.Sprintf("getting node %q from Snapshot: %v", nodeName, err))
+	}
+	snPerf, ok := nodeInfo.Node().Labels["hice.kj"]
+	var jPerf float64
+	if ok {
+		jPerf, err = strconv.ParseFloat(snPerf, 64)
+		if err != nil {
+			jPerf = 1.0
+		}
+	} else {
+		jPerf = 1.0
+	}
+
+	bsPerf, ok := pod.Labels["hice.kb"]
+	var bPerf float64
+	if ok {
+		bPerf, err = strconv.ParseFloat(bsPerf, 64)
+		if err != nil {
+			bPerf = 1.0
+		}
+	} else {
+		return 100, nil
+	}
+
+	if maxEdge == -1 {
+		// pod是首次部署，选择一个资源最丰富的节点、
+		memReq := int64(0)
+		cpuReq := int64(0)
+		for _, container := range pod.Spec.Containers {
+			memReq += container.Resources.Requests.Memory().MilliValue()
+			cpuReq += container.Resources.Requests.Cpu().MilliValue()
+		}
+		cpuReq = int64(float64(cpuReq) * bPerf / jPerf)
+
+		//计算异构CPU资源
+		// 计算节点已分配CPU资源，由于调度器缓存中的CPU资源数值并没有更新，必须根据kb和kj计算
+		// 同时当调度器从Api Server将Pod同步过来后，Pod中的资源数值为真实数值
+		// v1.18: 从Api Server同步得到的已调度历史Pod的NodeName字段非空，从缓存中加入的NodeName字段为空
+		//        后面的代码并没有对函数中的Pod指针做任何更改
+		// v1.22: 缓存的pod也会更新NodeName字段，所以我们使用Pod注释区分是从API Server同步过来的对象还是从缓存中得到的对象
+		//        我们在Bind方法中添加了注释字段<fromEtcd, 1>，因此从API Server得到的Pod注释不为空，而从缓存中得到的Pod注释为空
+		hiceNodeRequestedMilliCPU := int64(0)
+		for _, npod := range nodeInfo.Pods {
+			if npod.Pod.Spec.SchedulerName == "kubehice-scheduler" && npod.Pod.Annotations == nil {
+				hicePodRequestedMilliCPU := computePodResourceRequest(npod.Pod).MilliCPU
+
+				strHiceKb, ok := npod.Pod.Labels["hice.kb"]
+				if !ok {
+					strHiceKb = "1.0"
+				}
+				hiceKb, err := strconv.ParseFloat(strHiceKb, 64)
+				if err != nil {
+					hiceKb = 1.0
+				}
+				hiceNodeRequestedMilliCPU = hiceNodeRequestedMilliCPU + int64(float64(hicePodRequestedMilliCPU)*hiceKb/jPerf)
+			} else {
+				hiceNodeRequestedMilliCPU = hiceNodeRequestedMilliCPU + computePodResourceRequest(npod.Pod).MilliCPU
+			}
+
+		}
+		// 计算百分比，pod需要的资源/节点剩余资源，越大表示节点剩余资源越少
+		ratioCpu := float64(cpuReq) / float64(nodeInfo.Allocatable.MilliCPU-hiceNodeRequestedMilliCPU)
+		ratioMem := float64(memReq) / float64(nodeInfo.Allocatable.Memory-nodeInfo.Requested.Memory)
+		// 更大的一项表示资源更紧缺
+		maxRatio := math.Max(ratioCpu, ratioMem)
+		// 百分比在0~100之间，范围与Score的返回值范围相当，Score分数越大表示越优先，而我们的调度是资源越紧缺优先级越低，因此使用100-百分比，将其翻转
+		return 100 - int64(100*maxRatio), nil
+	} else {
+		// 选择一个期望延迟最低的节点
+
+	}
 	return 100, nil
 }
 
-// NormalizeScore将不同的打分插件所得的分数合并
-func (pl *MHice) NormalizeScore(ctx context.Context, cycleState *framework.CycleState, pod *v1.Pod, scores framework.NodeScoreList) *framework.Status {
-	return nil
+func computePodResourceRequest(pod *v1.Pod) preFilterState {
+	result := preFilterState{}
+	for _, container := range pod.Spec.Containers {
+		result.Add(container.Resources.Requests)
+	}
+
+	// take max_resource(sum_pod, any_init_container)
+	for _, container := range pod.Spec.InitContainers {
+		result.SetMaxResource(container.Resources.Requests)
+	}
+	return result
+}
+
+// preFilterState computed at PreFilter and used at Filter.
+type preFilterState struct {
+	framework.Resource
 }
 
 // New initializes a new plugin and returns it.
@@ -148,7 +364,7 @@ func New(_ runtime.Object, h framework.Handle) (framework.Plugin, error) {
 func (pl *MHice) neighborEdgeWeight(p *v1.Pod, graph *MicroServiceGraph) []int64 {
 
 	var edges []int64
-	pSvc, ok := p.Labels["svc"]
+	pSvc, ok := p.Labels["app"]
 	if !ok {
 		return nil
 	}
@@ -163,7 +379,7 @@ func (pl *MHice) neighborEdgeWeight(p *v1.Pod, graph *MicroServiceGraph) []int64
 			continue
 		}
 		if graph.Edge[pIndex][v] >= 0 {
-			edges = append(edges, graph.Edge[v][pIndex])
+			edges = append(edges, graph.Edge[pIndex][v])
 		}
 
 	}
@@ -178,7 +394,7 @@ func (pl *MHice) neighborExistedServiceEdgeWeight(p *framework.QueuedPodInfo, gr
 		return nil
 	}
 	var edges []int64
-	pSvc, ok := p.Pod.Labels["svc"]
+	pSvc, ok := p.Pod.Labels["app"]
 	if !ok {
 		return nil
 	}
@@ -188,7 +404,7 @@ func (pl *MHice) neighborExistedServiceEdgeWeight(p *framework.QueuedPodInfo, gr
 	}
 	for _, node := range nodes {
 		for _, ep := range node.Pods {
-			svc, ok := ep.Pod.Labels["svc"]
+			svc, ok := ep.Pod.Labels["app"]
 			if !ok {
 				continue
 			}
@@ -210,42 +426,42 @@ func GenerateServiceGraph() *MicroServiceGraph {
 	graph := &MicroServiceGraph{Num: 11}
 
 	graph.Vertex = make(map[string]int)
-	graph.Vertex["ad"] = 0 //无
-	graph.Vertex["cart"] = 1
-	graph.Vertex["checkout"] = 2
-	graph.Vertex["currency"] = 3 //无
-	graph.Vertex["email"] = 4    //无
+	graph.Vertex["adservice"] = 0 //无
+	graph.Vertex["cartservice"] = 1
+	graph.Vertex["checkoutservice"] = 2
+	graph.Vertex["currencyservice"] = 3 //无
+	graph.Vertex["emailservice"] = 4    //无
 	graph.Vertex["frontend"] = 5
-	graph.Vertex["payment"] = 6        //无
-	graph.Vertex["productcatalog"] = 7 //无
-	graph.Vertex["recommendation"] = 8
-	graph.Vertex["redis-cart"] = 9 //无
-	graph.Vertex["shipping"] = 10  //无
+	graph.Vertex["paymentservice"] = 6        //无
+	graph.Vertex["productcatalogservice"] = 7 //无
+	graph.Vertex["recommendationservice"] = 8
+	graph.Vertex["redis-cart"] = 9       //无
+	graph.Vertex["shippingservice"] = 10 //无
 	for i := 0; i < graph.Num; i++ {
 		for j := 0; j < graph.Num; j++ {
 			graph.Edge[i][j] = -1
 		}
 	}
 
-	SetAPICall("frontend", "cart", 1, graph)
-	SetAPICall("frontend", "recommendation", 1, graph)
-	SetAPICall("frontend", "productcatalog", 100, graph)
-	SetAPICall("frontend", "shipping", 1, graph)
-	SetAPICall("frontend", "checkout", 1, graph)
-	SetAPICall("frontend", "ad", 1, graph)
+	SetAPICall("frontend", "cartservice", 1, graph)
+	SetAPICall("frontend", "recommendationservice", 1, graph)
+	SetAPICall("frontend", "productcatalogservice", 100, graph)
+	SetAPICall("frontend", "shippingservice", 1, graph)
+	SetAPICall("frontend", "checkoutservice", 1, graph)
+	SetAPICall("frontend", "adservice", 1, graph)
 
-	SetAPICall("cart", "redis-cart", 1, graph)
+	SetAPICall("cartservice", "redis-cart", 1, graph)
 
-	SetAPICall("recommendation", "productcatalog", 10, graph)
+	SetAPICall("recommendationservice", "productcatalogservice", 10, graph)
 
-	SetAPICall("checkout", "productcatalog", 10, graph)
-	SetAPICall("checkout", "currency", 1, graph)
-	SetAPICall("checkout", "shipping", 1, graph)
-	SetAPICall("checkout", "payment", 1, graph)
-	SetAPICall("checkout", "email", 1, graph)
-	SetAPICall("checkout", "cart", 1, graph)
+	SetAPICall("checkoutservice", "productcatalogservice", 10, graph)
+	SetAPICall("checkoutservice", "currencyservice", 1, graph)
+	SetAPICall("checkoutservice", "shippingservice", 1, graph)
+	SetAPICall("checkoutservice", "paymentservice", 1, graph)
+	SetAPICall("checkoutservice", "emailservice", 1, graph)
+	SetAPICall("checkoutservice", "cartservice", 1, graph)
 
-	SetAPICall("checkout", "cart", 1, graph)
+	SetAPICall("checkoutservice", "cartservice", 1, graph)
 	return graph
 }
 
@@ -253,4 +469,9 @@ func SetAPICall(src, dst string, value int, g *MicroServiceGraph) {
 	srcIndex := g.Vertex[src]
 	dstIndex := g.Vertex[dst]
 	g.Edge[srcIndex][dstIndex] = int64(value)
+}
+
+func GenerateNetworkToplogy() *NetworkToplogy {
+	topology := &NetworkToplogy{}
+	return topology
 }

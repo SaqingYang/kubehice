@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/hicev2"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/imagelocality"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/interpodaffinity"
+	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/mhice"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/nodeaffinity"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/nodelabel"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/nodename"
@@ -61,6 +62,7 @@ func NewInTreeRegistry() runtime.Registry {
 	return runtime.Registry{
 		hicev1.Name:              hicev1.New,
 		hicev2.Name:              hicev2.New,
+		mhice.Name:               mhice.New,
 		selectorspread.Name:      selectorspread.New,
 		imagelocality.Name:       imagelocality.New,
 		tainttoleration.Name:     tainttoleration.New,
