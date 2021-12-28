@@ -38,10 +38,13 @@ type MicroServiceGraph struct {
 }
 
 type NetworkToplogy struct {
-	Node    map[string]int
-	Devices Tree
+	Bandwidth [100][100]float64
+	Latency   [100][100]float64
+	Node      map[string]int
+	Devices   Tree // 这是下一步工作
 }
 
+// 下一步工作
 type Tree struct {
 	Device    string // root表示根
 	Bandwidth int64  // Mbps, 到上一级的带宽
@@ -236,11 +239,14 @@ func (pl *MHice) Score(ctx context.Context, state *framework.CycleState, pod *v1
 	podIndex, ok := pl.ServiceGraph.Vertex[pod.Labels["app"]]
 	if !ok {
 		// 没有查到app属于微服务交互图中哪一个Service，无法识别它属于哪一个Service
+		fmt.Println("非svc: ", pod.Name)
 		return 100, nil
 	}
 	maxEdge := int64(-1)
 	nodes, _ := pl.handle.SnapshotSharedLister().NodeInfos().List()
-	deployedSvc := make(map[int]int)
+	deployedSvc := make(map[int]string)
+	callDeployedPod := make(map[string]*framework.PodInfo)
+	calledByDeployedPod := make(map[string]*framework.PodInfo)
 	for _, node := range nodes {
 		for _, np := range node.Pods {
 			vb, ok := pl.ServiceGraph.Vertex[np.Pod.Labels["app"]]
@@ -248,6 +254,12 @@ func (pl *MHice) Score(ctx context.Context, state *framework.CycleState, pod *v1
 				// 此pod在微服务图中
 				edgeva2vb := pl.ServiceGraph.Edge[podIndex][vb]
 				edgevb2va := pl.ServiceGraph.Edge[vb][podIndex]
+				if edgeva2vb >= 0 {
+					callDeployedPod[np.Pod.Name] = np
+				}
+				if edgevb2va >= 0 {
+					calledByDeployedPod[np.Pod.Name] = np
+				}
 				if maxEdge < edgeva2vb {
 					maxEdge = edgeva2vb
 				}
@@ -255,7 +267,7 @@ func (pl *MHice) Score(ctx context.Context, state *framework.CycleState, pod *v1
 					maxEdge = edgevb2va
 				}
 
-				deployedSvc[vb] = vb
+				deployedSvc[vb] = node.Node().Name
 
 			}
 		}
@@ -284,7 +296,7 @@ func (pl *MHice) Score(ctx context.Context, state *framework.CycleState, pod *v1
 			bPerf = 1.0
 		}
 	} else {
-		return 100, nil
+		bPerf = 1.0
 	}
 
 	if maxEdge == -1 {
@@ -292,7 +304,8 @@ func (pl *MHice) Score(ctx context.Context, state *framework.CycleState, pod *v1
 		memReq := int64(0)
 		cpuReq := int64(0)
 		for _, container := range pod.Spec.Containers {
-			memReq += container.Resources.Requests.Memory().MilliValue()
+
+			memReq += container.Resources.Requests.Memory().Value()
 			cpuReq += container.Resources.Requests.Cpu().MilliValue()
 		}
 		cpuReq = int64(float64(cpuReq) * bPerf / jPerf)
@@ -326,15 +339,54 @@ func (pl *MHice) Score(ctx context.Context, state *framework.CycleState, pod *v1
 		// 计算百分比，pod需要的资源/节点剩余资源，越大表示节点剩余资源越少
 		ratioCpu := float64(cpuReq) / float64(nodeInfo.Allocatable.MilliCPU-hiceNodeRequestedMilliCPU)
 		ratioMem := float64(memReq) / float64(nodeInfo.Allocatable.Memory-nodeInfo.Requested.Memory)
+		fmt.Println(nodeInfo.Allocatable.MilliCPU, " ", hiceNodeRequestedMilliCPU, " ", nodeInfo.Allocatable.Memory, " ", nodeInfo.Requested.Memory, " ", cpuReq, " ", memReq)
 		// 更大的一项表示资源更紧缺
 		maxRatio := math.Max(ratioCpu, ratioMem)
 		// 百分比在0~100之间，范围与Score的返回值范围相当，Score分数越大表示越优先，而我们的调度是资源越紧缺优先级越低，因此使用100-百分比，将其翻转
+		fmt.Println("首次部署的微服务组件", pod.Name, " 节点分数=", 100-int64(100*maxRatio))
 		return 100 - int64(100*maxRatio), nil
 	} else {
 		// 选择一个期望延迟最低的节点
+		maxCallDeployedPodDelay := float64(0)
+		maxCalledByDeployedPodDelay := float64(0)
+		maxCallDeployedPodNode := pl.Toplogy.Node[nodeName]
+		maxCalledByDeployedPodNode := pl.Toplogy.Node[nodeName]
+		for _, v := range callDeployedPod {
+			svcIndex := pl.ServiceGraph.Vertex[v.Pod.Labels["app"]]
+			svcNodeIndex := pl.Toplogy.Node[v.Pod.Spec.NodeName]
+			dataTransDelay := float64(pl.ServiceGraph.Edge[podIndex][svcIndex]) / pl.Toplogy.Bandwidth[svcNodeIndex][pl.Toplogy.Node[nodeName]] / 100.0
 
+			propagateDelay := pl.Toplogy.Latency[svcNodeIndex][pl.Toplogy.Node[nodeName]]
+			if maxCallDeployedPodDelay < dataTransDelay+propagateDelay {
+				maxCallDeployedPodNode = svcNodeIndex
+			}
+			maxCallDeployedPodDelay = math.Max(maxCallDeployedPodDelay, dataTransDelay+propagateDelay)
+		}
+		for _, v := range calledByDeployedPod {
+			svcIndex := pl.ServiceGraph.Vertex[v.Pod.Labels["app"]]
+			svcNodeIndex := pl.Toplogy.Node[v.Pod.Spec.NodeName]
+			dataTransDelay := float64(pl.ServiceGraph.Edge[svcIndex][podIndex]) / pl.Toplogy.Bandwidth[svcNodeIndex][pl.Toplogy.Node[nodeName]] / 100.0
+
+			propagateDelay := pl.Toplogy.Latency[svcNodeIndex][pl.Toplogy.Node[nodeName]]
+			if maxCalledByDeployedPodDelay < dataTransDelay+propagateDelay {
+				maxCalledByDeployedPodNode = svcNodeIndex
+			}
+			maxCalledByDeployedPodDelay = math.Max(maxCalledByDeployedPodDelay, dataTransDelay+propagateDelay)
+
+		}
+		fmt.Println("节点", nodeName, "期望最大延迟=", maxCallDeployedPodDelay+maxCalledByDeployedPodDelay, " 分数=", int64(100*math.Exp(-maxCallDeployedPodDelay-maxCalledByDeployedPodDelay)))
+		maxCallDelay := maxCallDeployedPodDelay + maxCalledByDeployedPodDelay
+		if maxCallDelay > 10 {
+			return 0, nil
+		}
+		if maxCallDeployedPodNode == pl.Toplogy.Node[nodeName] && pl.Toplogy.Node[nodeName] == maxCalledByDeployedPodNode {
+			return 100, nil
+		}
+
+		return 100 - int64(maxCallDelay/10*100), nil
+		// return int64(100 * math.Exp(-maxCallDeployedPodDelay-maxCalledByDeployedPodDelay)), nil
 	}
-	return 100, nil
+	// return 100, nil
 }
 
 func computePodResourceRequest(pod *v1.Pod) preFilterState {
@@ -357,7 +409,7 @@ type preFilterState struct {
 
 // New initializes a new plugin and returns it.
 func New(_ runtime.Object, h framework.Handle) (framework.Plugin, error) {
-	return &MHice{ServiceGraph: *GenerateServiceGraph(), handle: h}, nil
+	return &MHice{ServiceGraph: *GenerateServiceGraph(), Toplogy: *GenerateNetworkToplogy(), handle: h}, nil
 }
 
 // neighborEdgeWeight 根据微服务交互图得到与此Pod相连的所有的微服务调用边
@@ -473,5 +525,38 @@ func SetAPICall(src, dst string, value int, g *MicroServiceGraph) {
 
 func GenerateNetworkToplogy() *NetworkToplogy {
 	topology := &NetworkToplogy{}
+	topology.Node = make(map[string]int)
+	topology.Node["cloud-master"] = 0
+	topology.Node["cloud-worker1"] = 1
+	topology.Node["cloud-worker3"] = 2
+	topology.Node["ubuntu"] = 3
+	topology.Node["edge-arm64-1"] = 4
+	topology.Node["edge3-amd64-1"] = 5
+
+	b := [6][6]float64{
+		{70e3, 40e3, 40e3, 1e3, 1e3, 1e3},
+		{40e3, 70e3, 40e3, 1e3, 1e3, 1e3},
+		{40e3, 40e3, 70e3, 1e3, 1e3, 1e3},
+		{1e3, 1e3, 1e3, 6e3, 1e3, 1e3},
+		{1e3, 1e3, 1e3, 1e3, 6e3, 1e3},
+		{1e3, 1e3, 1e3, 1e3, 1e3, 60e3}}
+	for i := 0; i < 6; i++ {
+		for j := 0; j < 6; j++ {
+			topology.Bandwidth[i][j] = b[i][j]
+		}
+	}
+
+	l := [6][6]float64{ //目前的实验环境，延迟全部小于1ms
+		{0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0, 0}}
+	for i := 0; i < 6; i++ {
+		for j := 0; j < 6; j++ {
+			topology.Latency[i][j] = l[i][j]
+		}
+	}
 	return topology
 }
